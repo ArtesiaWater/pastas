@@ -12,6 +12,7 @@ import matplotlib.ticker as plticker
 import numpy as np
 from scipy.stats import probplot
 
+import pastas as ps
 from .utils import get_dt
 
 
@@ -67,7 +68,7 @@ class Plotting():
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def results(self, tmin=None, tmax=None, show=True):
         """Plot different results in one window to get a quick overview.
@@ -113,7 +114,7 @@ class Plotting():
         # Plot the block response function
         ax3 = plt.subplot(gs[0, -1])
         tmax = 0
-        for name, ts in self.ml.tseriesdict.items():
+        for name, ts in self.ml.stressmodels.items():
             dt = get_dt(self.ml.settings["freq"])
             if "rfunc" in dir(ts):
                 br = self.ml.get_block_response(name)
@@ -128,14 +129,14 @@ class Plotting():
         ax5 = plt.subplot(gs[2, -1])
         ax5.xaxis.set_visible(False)
         ax5.yaxis.set_visible(False)
-        plt.text(0.05, 0.8, 'AIC: %.2f' % self.ml.stats.aic())
-        plt.text(0.05, 0.6, 'BIC: %.2f' % self.ml.stats.aic())
+        plt.text(0.05, 0.8, 'Rsq: %.2f' % self.ml.stats.rsq())
+        plt.text(0.05, 0.6, 'EVP: %.2f' % self.ml.stats.evp())
         plt.title('Statistics', loc='left')
 
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def decomposition(self, tmin=None, tmax=None, show=True):
         """Plot the decomposition of a time-series in the different stresses.
@@ -156,7 +157,7 @@ class Plotting():
         h = [hsim]
 
         # determine the influence of the different stresses
-        for name in self.ml.tseriesdict.keys():
+        for name in self.ml.stressmodels.keys():
             h.append(self.ml.get_contribution(name, tindex=tindex))
 
         # open the figure
@@ -168,7 +169,7 @@ class Plotting():
                 hr = 0.0
             height_ratios.append(hr)
 
-        fig, ax = plt.subplots(1 + len(self.ml.tseriesdict), sharex=True,
+        fig, ax = plt.subplots(1 + len(self.ml.stressmodels), sharex=True,
                                gridspec_kw={'height_ratios': height_ratios})
         ax = np.atleast_1d(ax)  # ax.Flatten is maybe better?
 
@@ -189,7 +190,7 @@ class Plotting():
             base = None
 
         # plot the influence of the stresses
-        for i, name in enumerate(self.ml.tseriesdict.keys(), start=1):
+        for i, name in enumerate(self.ml.stressmodels.keys(), start=1):
             h[i].plot(ax=ax[i], x_compat=True)
 
             if base is not None:
@@ -205,7 +206,7 @@ class Plotting():
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def diagnostics(self, tmin=None, tmax=None, show=True):
         innovations = self.ml.innovations(tmin, tmax)
@@ -216,12 +217,13 @@ class Plotting():
         plt.subplot(gs[0, :2])
         plt.title('Autocorrelation')
         # plt.axhline(0.2, '--')
-        plt.stem(self.ml.stats.acf())
+        r = ps.stats.acf(innovations)
+        plt.stem(r)
 
         plt.subplot(gs[1, :2])
         plt.title('Partial Autocorrelation')
         # plt.axhline(0.2, '--')
-        plt.stem(self.ml.stats.pacf())
+        # plt.stem(self.ml.stats.pacf())
 
         plt.subplot(gs[0, 2])
         innovations.hist(bins=20)
@@ -232,7 +234,7 @@ class Plotting():
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def block_response(self, series=None, show=True):
         """Plot the block response for a specific series.
@@ -244,7 +246,7 @@ class Plotting():
 
         """
         if not series:
-            series = self.ml.tseriesdict.keys()
+            series = self.ml.stressmodels.keys()
         else:
             series = [series]
 
@@ -252,9 +254,9 @@ class Plotting():
         fig = self._get_figure()
 
         for name in series:
-            if name not in self.ml.tseriesdict.keys():
+            if name not in self.ml.stressmodels.keys():
                 return None
-            elif hasattr(self.ml.tseriesdict[name], 'rfunc'):
+            elif hasattr(self.ml.stressmodels[name], 'rfunc'):
                 plt.plot(self.ml.get_block_response(name))
                 legend.append(name)
             else:
@@ -274,7 +276,7 @@ class Plotting():
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def step_response(self, series=None, show=True):
 
@@ -287,7 +289,7 @@ class Plotting():
 
         """
         if not series:
-            series = self.ml.tseriesdict.keys()
+            series = self.ml.stressmodels.keys()
         else:
             series = [series]
 
@@ -295,9 +297,9 @@ class Plotting():
         fig = self._get_figure()
 
         for name in series:
-            if name not in self.ml.tseriesdict.keys():
+            if name not in self.ml.stressmodels.keys():
                 return None
-            elif hasattr(self.ml.tseriesdict[name], 'rfunc'):
+            elif hasattr(self.ml.stressmodels[name], 'rfunc'):
                 plt.plot(self.ml.get_step_response(name))
                 legend.append(name)
             else:
@@ -317,7 +319,7 @@ class Plotting():
         if show:
             plt.show()
 
-        return fig
+        return fig.axes
 
     def _get_figure(self, **kwargs):
         fig = plt.figure(**kwargs)

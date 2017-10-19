@@ -18,3 +18,5 @@ dist
 .idea/.name
 pastas/utils.py
 .cache/v/cache/lastfailed
+*.log
+*.pas

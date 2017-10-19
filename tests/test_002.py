@@ -32,8 +32,8 @@ def test_model():
     # Create the time series model
     ml = Model(oseries)
 
-    ts1 = Tseries2(stress=[rain, evap], rfunc=Gamma, name='recharge')
-    ml.add_tseries(ts1)
+    ts1 = StressModel2(stress=[rain, evap], rfunc=Gamma, name='recharge')
+    ml.add_stressmodel(ts1)
     n = NoiseModel()
     ml.add_noisemodel(n)
 

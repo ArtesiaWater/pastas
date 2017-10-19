@@ -3,7 +3,7 @@ Recharge Example
 ================
 
 In this example the use of the ``TseriesRecharge class`` is explained.
-This ``Tseries class`` is developed to calculate the recharge series
+This ``StressModel class`` is developed to calculate the recharge series
 from the measured evaporation and precipitation series. Different
 recharge models are available: Linear, Preferential, Percolation, and
 Combination model. More information on these recharge models can be

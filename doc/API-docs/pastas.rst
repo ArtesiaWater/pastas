@@ -16,13 +16,15 @@ Submodules
 
 .. toctree::
 
+   pastas.decorators
    pastas.model
+   pastas.noisemodels
    pastas.plots
    pastas.rfunc
    pastas.solver
    pastas.stats
+   pastas.stressmodels
    pastas.timeseries
-   pastas.tseries
    pastas.utils
    pastas.version
 

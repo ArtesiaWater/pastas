@@ -12,12 +12,14 @@ Usage
 
 """
 
+import logging
 import os
-from warnings import warn
 
 import numpy as np
 import pandas as pd
 import pastas as ps
+
+logger = logging.getLogger(__name__)
 
 
 class Project:
@@ -33,74 +35,65 @@ class Project:
         self.data = pd.DataFrame()
 
         # DataFrames to store the data of the oseries and stresses
-        self.tseries = pd.DataFrame(index=[],
-                                    columns=["name", "series", "kind", "x",
+        self.stresses = pd.DataFrame(index=[],
+                                     columns=["name", "series", "kind", "x",
                                              "y", "z", "metadata"])
         self.oseries = pd.DataFrame(index=[],
                                     columns=["name", "series", "kind", "x",
                                              "y", "z", "metadata"])
 
         self.distances = pd.DataFrame(index=self.oseries.index,
-                                      columns=self.tseries.index)
+                                      columns=self.stresses.index)
 
         # Project metadata and file information
         self.metadata = self.get_metadata(metadata)
-        self.file_info = self.get_file_info()
+        self.file_info = self._get_file_info()
 
-    def add_oseries(self, series, name, kind="oseries", metadata=None,
-                    settings=None):
-        """Method to add a oseries to the database.
-
-        """
-        ts = ps.TimeSeries(series=series, name=name, kind=kind,
-                           settings=settings)
-        self.oseries.set_value(name, "name", name)
-        self.oseries.set_value(name, "series", ts)
-        self.oseries.set_value(name, "metadata", metadata)
-        self.oseries.set_value(name, "kind", kind)
-
-        # Transfer x, y and z to dataframe as well to increase speed.
-        for i in ["x", "y", "z"]:
-            if i in metadata.keys():
-                value = metadata[i]
-            else:
-                value = 0.0
-            self.oseries.set_value(name, i, value)
-
-    def add_tseries(self, series, name, kind=None, metadata=None,
-                    settings=None):
-        """Method to add a tseries to the database.
-
-        """
-        ts = ps.TimeSeries(series=series, name=name, kind=kind,
-                           settings=settings)
-        self.tseries.set_value(name, "name", name)
-        self.tseries.set_value(name, "series", ts)
-        self.tseries.set_value(name, "metadata", metadata)
-        self.tseries.set_value(name, "kind", kind)
-
-        # Transfer x, y and z to dataframe as well to increase speed.
-        for i in ["x", "y", "z"]:
-            if i in metadata.keys():
-                value = metadata[i]
-            else:
-                value = 0.0
-            self.tseries.set_value(name, i, value)
-
-    def del_tseries(self, tseries):
-        """Method that removes tseries from the project.
+    def add_series(self, series, name, kind, metadata=None, settings=None):
+        """Method to add series to the oseries or tseries database.
 
         Parameters
         ----------
-        tseries: list or str
-            list with multiple or string with a single tseries name.
+        series: pandas.Series or pastas.TimeSeries
+            Series object.
+        name: str
+            String with the name of the series that will be maintained in
+            the database.
+        kind: str
+            The kind of series that is added. When oseries are added it is
+            necessary to state "oseries" here.
+        metadata: dict
+            Dictionary with any metadata that will be passed to the
+            TimeSeries object that is created internally.
+        settings: dict
+            Dictionary with any settings that will be passed to the
+            TimeSeries object that is created internally.
 
         Returns
         -------
 
         """
-        self.tseries.drop(tseries, inplace=True)
-        self.update_distances()
+        try:
+            ts = ps.TimeSeries(series=series, name=name, kind=kind,
+                               settings=settings, metadata=metadata)
+        except:
+            logger.warning("Time series %s is ommitted from the database."
+                           % name)
+            return
+
+        if kind == "oseries":
+            data = self.oseries
+        else:
+            data = self.stresses
+
+        data.set_value(name, "name", name)
+        data.set_value(name, "series", ts)
+        data.set_value(name, "kind", kind)
+
+        # Transfer x, y and z to dataframe as well to increase speed.
+        for i in ["x", "y", "z"]:
+            value = ts.metadata[i]
+            data.set_value(name, i, value)
 
     def del_oseries(self, oseries):
         """Method that removes oseries from the project.
@@ -117,20 +110,52 @@ class Project:
         self.oseries.drop(oseries, inplace=True)
         self.update_distances()
 
-    def add_model(self, name, ml_name=None, **kwargs):
+    def del_tseries(self, tseries):
+        """Method that removes oseries from the project.
+
+        Parameters
+        ----------
+        tseries: list or str
+            list with multiple or string with a single oseries name.
+
+        Returns
+        -------
+
+        """
+        self.stresses.drop(tseries, inplace=True)
+        self.update_distances()
+
+    def add_model(self, oseries, ml_name=None, **kwargs):
+        """Method to add a Pastas Model instance based on one of the oseries.
+
+        Parameters
+        ----------
+        oseries: str
+            string with the exact names of one of the oseries indices.
+        ml_name: str
+            Name of the model
+        kwargs: dict
+            any arguments that are taken by the Pastas Model instance can be
+            provided.
+
+        Returns
+        -------
+        ml: pastas.Model
+            Pastas Model generated with the oseries and arguments provided.
+
+        """
         if ml_name is None:
-            ml_name = name
+            ml_name = oseries
 
         # Validate name and ml_name before continuing
         if ml_name in self.models.keys():
-            return warn("Model name is not unique, provide a new name.")
-        if name not in self.oseries.index:
-            return warn(
-                "Oseries name is not present in the database. Make sure to provide a valid oseries name.")
+            logger.warning("Model name is not unique, provide a new ml_name.")
+        if oseries not in self.oseries.index:
+            logger.warning("Oseries name is not present in the database. "
+                           "Make sure to provide a valid oseries name.")
 
-        oseries = self.oseries.loc[name, "series"]
-        metadata = self.oseries.loc[name, "metadata"]
-        ml = ps.Model(oseries, name=ml_name, metadata=metadata, **kwargs)
+        oseries = self.oseries.loc[oseries, "series"]
+        ml = ps.Model(oseries, name=ml_name, **kwargs)
 
         # Add new model to the models dictionary
         self.models[ml_name] = ml
@@ -180,16 +205,16 @@ class Project:
         """
         # Make sure these are values, even when actually objects.
         xo = pd.to_numeric(self.oseries.x)
-        xt = pd.to_numeric(self.tseries.x)
+        xt = pd.to_numeric(self.stresses.x)
         yo = pd.to_numeric(self.oseries.y)
-        yt = pd.to_numeric(self.tseries.y)
+        yt = pd.to_numeric(self.stresses.y)
 
         xh, xi = np.meshgrid(xt, xo)
         yh, yi = np.meshgrid(yt, yo)
 
         self.distances = pd.DataFrame(np.sqrt((xh - xi) ** 2 + (yh - yi) ** 2),
                                       index=self.oseries.index,
-                                      columns=self.tseries.index)
+                                      columns=self.stresses.index)
 
     def add_recharge(self, ml, **kwargs):
         """Adds a recharge element to the time series model. The
@@ -201,19 +226,17 @@ class Project:
 
         """
         key = ml.name
-        prec_name = self.distances.loc[key, self.tseries.type ==
+        prec_name = self.distances.loc[key, self.stresses.kind ==
                                        "prec"].argmin()
-        prec = self.tseries.loc[prec_name, "series"]
-        evap_name = self.distances.loc[key, self.tseries.type ==
+        prec = self.stresses.loc[prec_name, "series"]
+        evap_name = self.distances.loc[key, self.stresses.kind ==
                                        "evap"].argmin()
-        evap = self.tseries.loc[evap_name, "series"]
+        evap = self.stresses.loc[evap_name, "series"]
 
-        prec.index = prec.index.round("D")
-        evap.index = evap.index.round("D")
+        recharge = ps.StressModel2([prec, evap], ps.Gamma, name="recharge",
+                                   **kwargs)
 
-        recharge = ps.Tseries2(prec, evap, ps.Gamma, name="recharge", **kwargs)
-
-        ml.add_tseries(recharge)
+        ml.add_stressmodel(recharge)
 
     def get_metadata(self, meta):
         metadata = dict(
@@ -222,7 +245,7 @@ class Project:
 
         return metadata
 
-    def get_file_info(self):
+    def _get_file_info(self):
         file_info = dict()
         file_info["date_created"] = pd.Timestamp.now()
         file_info["date_modified"] = pd.Timestamp.now()
@@ -232,6 +255,20 @@ class Project:
         except:
             file_info["owner"] = "Unknown"
         return file_info
+
+    def dump(self, fname=None, **kwargs):
+        """Method to write a Pastas project to a file.
+
+        Parameters
+        ----------
+        fname
+
+        Returns
+        -------
+
+        """
+        data = self.dump_data(**kwargs)
+        return ps.io.base.dump(fname, data)
 
     def dump_data(self, series=False, metadata=True, sim_series=False):
         """Method to export a Pastas Project and return a dictionary with
@@ -256,8 +293,8 @@ class Project:
         )
 
         # Series DataFrame
-        data["oseries"] = self.series_to_dict(self.oseries)
-        data["tseries"] = self.series_to_dict(self.tseries)
+        data["oseries"] = self._series_to_dict(self.oseries)
+        data["tseries"] = self._series_to_dict(self.stresses)
 
         # Models
         data["models"] = dict()
@@ -269,25 +306,79 @@ class Project:
 
         return data
 
-    def series_to_dict(self, series):
+    def _series_to_dict(self, series):
         series = series.to_dict(orient="index")
 
         for name in series.keys():
             ts = series[name]["series"]
-            series[name]["series"] = ts.dump()
+            series[name]["series"] = ts.dump(series=True)
 
         return series
 
-    def dump(self, fname=None, **kwargs):
-        """Method to write a Pastas project to a file.
+    def get_nearest_tseries(self, oseries, kind, n=1):
+        """Method to obtain the nearest (n) tseries of a specific kind.
 
         Parameters
         ----------
-        fname
+        oseries: str
+            String with the name of the oseries
+        kind:
+            String with the name of the tseries
+        n: int
+            Number of tseries to obtain
 
         Returns
         -------
+        tseries:
+            List with the names of the tseries.
 
         """
-        data = self.dump_data(**kwargs)
-        return ps.io.base.dump(fname, data)
+        if isinstance(oseries, str):
+            oseries = [oseries]
+
+        tseries = self.stresses[self.stresses.kind == kind].index
+
+        distances = self.get_distances(oseries, tseries)
+
+        sorted = pd.DataFrame(columns=np.arange(n))
+
+        for series in oseries:
+            series = pd.Series(distances.loc[series].sort_values().index[:n],
+                               name=series)
+            sorted = sorted.append(series)
+
+        return sorted
+
+    def get_distances(self, oseries=None, tseries=None):
+        """Method to obtain the distances in meters between the tseries and
+        oseries.
+
+        Parameters
+        ----------
+        oseries: str or list of str
+        tseries: str or list of str
+
+        Returns
+        -------
+        distances: pandas.DataFrame
+            Pandas DataFrame with the distances between the oseries (index)
+            and the tseries (columns).
+
+        """
+        if oseries is None:
+            oseries = self.oseries.index
+        if tseries is None:
+            tseries = self.stresses.index
+
+        xo = pd.to_numeric(self.oseries.loc[oseries, "x"])
+        xt = pd.to_numeric(self.stresses.loc[tseries, "x"])
+        yo = pd.to_numeric(self.oseries.loc[oseries, "y"])
+        yt = pd.to_numeric(self.stresses.loc[tseries, "y"])
+
+        xh, xi = np.meshgrid(xt, xo)
+        yh, yi = np.meshgrid(yt, yo)
+
+        distances = pd.DataFrame(np.sqrt((xh - xi) ** 2 + (yh - yi) ** 2),
+                                 index=oseries, columns=tseries)
+
+        return distances
